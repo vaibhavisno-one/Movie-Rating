@@ -34,7 +34,7 @@ This project is a full-stack movie rating and recommendation website. It fetches
 1. Clone the repository:
    ```bash
    git clone https://github.com/your-username/movie-rating-website.git
-   cd movie-rating-website
+   cd Movie_rating
    ```
 
 2. Install dependencies:
