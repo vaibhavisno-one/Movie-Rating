@@ -193,7 +193,7 @@ export default function MovieDetails() {
           movie_id: movieId,
           rating: userRating,
           review: sanitizeReview(review),
-          intimacy_rating,
+          intimacyRating,
         });
 
         if (ratingError) throw ratingError;
