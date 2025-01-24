@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { getPopularMovies, searchMovies, getMoviesByGenre } from '../lib/tmdb';
-import { Search, Filter } from 'lucide-react';
+import { getPopularMovies, searchMovies, getMoviesByGenre, getMoviesByMood, languageCodes } from '../lib/tmdb';
+import { Search, Filter, Globe2 } from 'lucide-react';
 import { Button } from './ui/button';
+import { useDebounce } from '../lib/hooks';
 
 interface Movie {
   id: number;
@@ -21,53 +22,97 @@ const genres = [
   { id: 878, name: 'Science Fiction' },
 ];
 
+const moods = [
+  { id: 'happy', name: 'Happy', emoji: '😊' },
+  { id: 'sad', name: 'Sad', emoji: '😢' },
+  { id: 'adventurous', name: 'Adventurous', emoji: '🚀' },
+  { id: 'romantic', name: 'Romantic', emoji: '💝' },
+  { id: 'scary', name: 'Scary', emoji: '😱' },
+  { id: 'inspiring', name: 'Inspiring', emoji: '✨' },
+  { id: 'relaxing', name: 'Relaxing', emoji: '😌' },
+  { id: 'thoughtful', name: 'Thoughtful', emoji: '🤔' },
+];
+
 export default function Home() {
   const [movies, setMovies] = useState<Movie[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGenre, setSelectedGenre] = useState<number | null>(null);
+  const [selectedMood, setSelectedMood] = useState<string | null>(null);
+  const [selectedLanguage, setSelectedLanguage] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const observer = useRef<IntersectionObserver | null>(null);
+  const debouncedSearch = useDebounce(searchQuery, 300);
 
-useEffect(() => {
-  const fetchMovies = async () => {
-    try {
-      setLoading(true);
-      let data;
+  const lastMovieElementRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      if (loading) return;
+      if (observer.current) observer.current.disconnect();
+      observer.current = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting && hasMore) {
+          setPage((prevPage) => prevPage + 1);
+        }
+      });
+      if (node) observer.current.observe(node);
+    },
+    [loading, hasMore]
+  );
 
-      if (searchQuery) {
-        data = await searchMovies(searchQuery);
-      } else if (selectedGenre) {
-        data = await getMoviesByGenre(selectedGenre);
-      } else {
-        data = await getPopularMovies();
+  useEffect(() => {
+    const fetchMovies = async () => {
+      try {
+        setLoading(true);
+        let data;
+
+        if (debouncedSearch) {
+          data = await searchMovies(debouncedSearch, selectedLanguage || undefined);
+          setHasMore(false); // Disable infinite scroll for search results
+        } else if (selectedMood) {
+          data = await getMoviesByMood(selectedMood as keyof typeof moods, page);
+        } else if (selectedGenre) {
+          data = await getMoviesByGenre(selectedGenre, page, selectedLanguage || undefined);
+        } else {
+          data = await getPopularMovies(page, selectedLanguage || undefined);
+        }
+
+        if (data && data.results) {
+          setMovies((prev) => 
+            page === 1 ? data.results : [...prev, ...data.results]
+          );
+          setHasMore(data.page < data.total_pages);
+        } else {
+          setMovies([]);
+          setError('No movies found.');
+          setHasMore(false);
+        }
+      } catch (err) {
+        console.error('Failed to fetch movies:', err);
+        setError('Failed to fetch movies');
+      } finally {
+        setLoading(false);
       }
+    };
 
-      if (data && data.results) {
-        setMovies(data.results);
-      } else {
-        setMovies([]); // Fallback if `results` is undefined
-        setError('No movies found.');
-      }
-    } catch (err) {
-      console.error('Failed to fetch movies:', err);
-      setError('Failed to fetch movies');
-    } finally {
-      setLoading(false);
+    fetchMovies();
+  }, [debouncedSearch, selectedGenre, selectedMood, selectedLanguage, page]);
+
+  const handleFilterChange = (type: 'genre' | 'mood' | 'language', value: any) => {
+    setPage(1); // Reset page when changing filters
+    setMovies([]); // Clear current movies
+    
+    if (type === 'genre') {
+      setSelectedGenre(value);
+      setSelectedMood(null);
+    } else if (type === 'mood') {
+      setSelectedMood(value);
+      setSelectedGenre(null);
+    } else if (type === 'language') {
+      setSelectedLanguage(value);
     }
   };
-
-  const debounce = setTimeout(fetchMovies, 300);
-  return () => clearTimeout(debounce);
-}, [searchQuery, selectedGenre]);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[50vh]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      </div>
-    );
-  }
 
   if (error) {
     return (
@@ -83,8 +128,10 @@ useEffect(() => {
         <h1 className="text-3xl font-bold">
           {searchQuery
             ? 'Search Results'
+            : selectedMood
+            ? `${moods.find((m) => m.id === selectedMood)?.name} Movies`
             : selectedGenre
-            ? genres.find((g) => g.id === selectedGenre)?.name + ' Movies'
+            ? `${genres.find((g) => g.id === selectedGenre)?.name} Movies`
             : 'Popular Movies'}
         </h1>
         <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -109,30 +156,80 @@ useEffect(() => {
       </div>
 
       {showFilters && (
-        <div className="flex flex-wrap gap-2 mb-6">
-          <Button
-            variant={selectedGenre === null ? 'default' : 'outline'}
-            onClick={() => setSelectedGenre(null)}
-          >
-            All
-          </Button>
-          {genres.map((genre) => (
-            <Button
-              key={genre.id}
-              variant={selectedGenre === genre.id ? 'default' : 'outline'}
-              onClick={() => setSelectedGenre(genre.id)}
-            >
-              {genre.name}
-            </Button>
-          ))}
+        <div className="space-y-4 mb-6">
+          {/* Language Filter */}
+          <div>
+            <h3 className="text-sm font-medium mb-2 flex items-center gap-2">
+              <Globe2 className="h-4 w-4" />
+              Language
+            </h3>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant={selectedLanguage === null ? 'default' : 'outline'}
+                onClick={() => handleFilterChange('language', null)}
+              >
+                All
+              </Button>
+              {Object.entries(languageCodes).map(([lang, code]) => (
+                <Button
+                  key={code}
+                  variant={selectedLanguage === code ? 'default' : 'outline'}
+                  onClick={() => handleFilterChange('language', code)}
+                >
+                  {lang.charAt(0).toUpperCase() + lang.slice(1)}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          {/* Mood Filter */}
+          <div>
+            <h3 className="text-sm font-medium mb-2">Mood</h3>
+            <div className="flex flex-wrap gap-2">
+              {moods.map((mood) => (
+                <Button
+                  key={mood.id}
+                  variant={selectedMood === mood.id ? 'default' : 'outline'}
+                  onClick={() => handleFilterChange('mood', mood.id)}
+                  className="flex items-center gap-2"
+                >
+                  <span>{mood.emoji}</span>
+                  {mood.name}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          {/* Genre Filter */}
+          <div>
+            <h3 className="text-sm font-medium mb-2">Genre</h3>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant={selectedGenre === null ? 'default' : 'outline'}
+                onClick={() => handleFilterChange('genre', null)}
+              >
+                All
+              </Button>
+              {genres.map((genre) => (
+                <Button
+                  key={genre.id}
+                  variant={selectedGenre === genre.id ? 'default' : 'outline'}
+                  onClick={() => handleFilterChange('genre', genre.id)}
+                >
+                  {genre.name}
+                </Button>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-        {movies.map((movie) => (
+        {movies.map((movie, index) => (
           <Link
             key={movie.id}
             to={`/movie/${movie.id}`}
+            ref={index === movies.length - 1 ? lastMovieElementRef : null}
             className="group relative rounded-lg overflow-hidden bg-card shadow-lg transition-transform hover:scale-105"
           >
             <img
@@ -154,6 +251,12 @@ useEffect(() => {
           </Link>
         ))}
       </div>
+
+      {loading && (
+        <div className="flex justify-center mt-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      )}
     </div>
   );
 }
