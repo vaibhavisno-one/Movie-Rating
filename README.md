@@ -23,20 +23,19 @@ This project is a full-stack movie rating and recommendation website. It fetches
 - **React Router**: For navigation and routing.
 
 ### Backend
-- **Supabase**: Backend-as-a-service for database and authentication.
 - **TMDB API**: For fetching movie data and details.
 
 ## Prerequisites
 
 - **Node.js** (v14 or higher)
-- **Supabase Account** (for backend services)
+
 - **TMDB API Key**
 
 ## Installation
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-username/movie-rating-website.git
+   git clone https://github.com/vaibhavisno-one/Movie-Rating
    cd Movie_rating
    ```
 
@@ -45,13 +44,7 @@ This project is a full-stack movie rating and recommendation website. It fetches
    npm install
    ```
 
-3. Set up environment variables:
-   Create a `.env` file in the root directory with the following:
-   ```env
-   REACT_APP_SUPABASE_URL=your_supabase_url
-   REACT_APP_SUPABASE_KEY=your_supabase_key
-   REACT_APP_TMDB_API_KEY=your_tmdb_api_key
-   ```
+
 
 4. Start the development server:
    ```bash
@@ -61,29 +54,7 @@ This project is a full-stack movie rating and recommendation website. It fetches
 5. Open the application:
    Visit `http://localhost:5173` in your browser.
 
-## Folder Structure
 
-```
-.
-├── src
-│   ├── components
-│   │   ├── Home.tsx
-│   │   ├── MovieDetails.tsx
-│   │   └── ui
-│   │       ├── Button.tsx
-│   │       └── ThemeSwitcher.tsx
-│   ├── lib
-│   │   ├── supabase.ts
-│   │   └── tmdb.ts
-│   ├── App.tsx
-│   └── main.tsx
-├── public
-│   └── index.html
-├── .env
-├── package.json
-├── tailwind.config.js
-└── README.md
-```
 
 ## Usage
 
@@ -97,24 +68,9 @@ This project is a full-stack movie rating and recommendation website. It fetches
 
 ### TMDB API
 - Fetch movie data, genres, and recommendations.
-- Example:
-  ```typescript
-  import { createClient } from '@supabase/supabase-js';
 
-  const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
-  const supabaseKey = process.env.REACT_APP_SUPABASE_KEY;
 
-  export const supabase = createClient(supabaseUrl, supabaseKey);
-  ```
 
-### Supabase
-- Use for storing user ratings and profiles.
-- Example Query:
-  ```sql
-  SELECT *
-  FROM ratings
-  WHERE movie_id = '762509';
-  ```
 
 ## Contributing
 

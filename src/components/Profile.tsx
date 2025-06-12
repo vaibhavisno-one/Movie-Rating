@@ -1,39 +1,19 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../lib/store';
-import { supabase } from '../lib/supabase';
+import * as localStore from '../lib/localStorageService'; // Import Local Storage Service
 import { Button } from './ui/button';
 
-interface FavoriteMovie {
-  id: string;
-  movies: {
-    id: string;
-    title: string;
-    poster_path: string;
-    release_date: string;
-  };
-}
-
-interface UserRating {
-  id: string;
-  rating: number;
-  review: string;
-  intimacy_rating: string;
-  created_at: string;
-  movies: {
-    id: string;
-    title: string;
-    poster_path: string;
-  };
-}
+// Interfaces are now imported from localStore or use its types directly
 
 export default function Profile() {
-  const { user } = useAuthStore();
+  const { user, setUser } = useAuthStore(); // Assuming setUser can update the user object in store
   const navigate = useNavigate();
-  const [favorites, setFavorites] = useState<FavoriteMovie[]>([]);
-  const [ratings, setRatings] = useState<UserRating[]>([]);
+  const [favorites, setFavorites] = useState<localStore.FavoriteMovie[]>([]);
+  const [ratings, setRatings] = useState<localStore.RatingReview[]>([]);
   const [username, setUsername] = useState('');
   const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -41,42 +21,22 @@ export default function Profile() {
       return;
     }
 
-    const fetchUserData = async () => {
+    const fetchUserData = () => {
+      setLoading(true);
       try {
-        // Fetch user profile
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('username')
-          .eq('id', user.id)
-          .single();
+        // Username comes from the auth store
+        setUsername(user.username || user.email || ''); // Fallback to email if username is not set
 
-        if (profile) {
-          setUsername(profile.username || '');
-        }
+        // Fetch favorites from Local Storage
+        const favs = localStore.getFavorites(user.id);
+        setFavorites(favs);
 
-        // Fetch favorites
-        const { data: favoritesData } = await supabase
-          .from('favorites')
-          .select('id, movies(id, title, poster_path, release_date)')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false });
-
-        if (favoritesData) {
-          setFavorites(favoritesData);
-        }
-
-        // Fetch ratings
-        const { data: ratingsData } = await supabase
-          .from('ratings')
-          .select('id, rating, review, intimacy_rating, created_at, movies(id, title, poster_path)')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false });
-
-        if (ratingsData) {
-          setRatings(ratingsData);
-        }
+        // Fetch ratings from Local Storage
+        const userRatings = localStore.getUserRatingsReviews(user.id);
+        setRatings(userRatings);
       } catch (error) {
-        console.error('Error fetching user data:', error);
+        console.error('Error fetching user data from local storage:', error);
+        setMessage('Failed to load profile data.');
       } finally {
         setLoading(false);
       }
@@ -85,19 +45,23 @@ export default function Profile() {
     fetchUserData();
   }, [user, navigate]);
 
-  const updateUsername = async () => {
+  const handleUpdateUsername = async () => {
     if (!user) return;
-
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .upsert({ id: user.id, username });
-
-      if (error) throw error;
-    } catch (error) {
-      console.error('Error updating username:', error);
+    
+    // This part will be fully functional after store.ts is updated with updateUsername
+    const { updateUsername: updateStoreUsername } = useAuthStore.getState();
+    if (updateStoreUsername) {
+        updateStoreUsername(username);
+        setMessage('Username updated successfully!');
+        // Optionally, refetch or update user from store if needed, though store should handle it
+    } else {
+        console.warn('updateUsername function not found in auth store. Store modification pending.');
+        setMessage('Username update feature pending store update.');
     }
+    // For now, also update local component state if store isn't fully ready for this:
+    // setUser({ ...user, username: username }); // This would be if setUser could take partial updates or if we construct the full user
   };
+
 
   if (loading) {
     return (
@@ -108,16 +72,21 @@ export default function Profile() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8">
+    <div className="max-w-6xl mx-auto space-y-8 p-4">
+      {message && (
+        <div className={`p-3 rounded-md ${message.includes('Failed') ? 'bg-destructive/10 text-destructive' : 'bg-constructive/10 text-constructive'}`}>
+          {message}
+        </div>
+      )}
       {/* Profile Info */}
-      <div className="bg-card rounded-lg p-6">
-        <h2 className="text-2xl font-bold mb-4">Profile</h2>
-        <div className="space-y-4">
+      <div className="bg-card rounded-lg p-6 shadow">
+        <h2 className="text-2xl font-bold mb-6">Profile</h2>
+        <div className="space-y-6">
           <div>
             <label className="block text-sm font-medium text-muted-foreground mb-1">
               Email
             </label>
-            <p className="text-lg">{user?.email}</p>
+            <p className="text-lg bg-muted p-2 rounded-md">{user?.email}</p>
           </div>
           <div>
             <label
@@ -132,10 +101,10 @@ export default function Profile() {
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="flex-1 p-2 rounded-md border bg-background"
+                className="flex-1 p-2 rounded-md border bg-background focus:ring-primary focus:border-primary"
                 placeholder="Set your username"
               />
-              <Button onClick={updateUsername}>Save</Button>
+              <Button onClick={handleUpdateUsername}>Save Username</Button>
             </div>
           </div>
         </div>
@@ -144,65 +113,71 @@ export default function Profile() {
       {/* Favorites */}
       <div>
         <h2 className="text-2xl font-bold mb-4">Favorite Movies</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-          {favorites.map((favorite) => (
-            <div
-              key={favorite.id}
-              className="bg-card rounded-lg overflow-hidden shadow-lg"
-            >
-              <img
-                src={`https://image.tmdb.org/t/p/w500${favorite.movies.poster_path}`}
-                alt={favorite.movies.title}
-                className="w-full aspect-[2/3] object-cover"
-              />
-              <div className="p-4">
-                <h3 className="font-semibold line-clamp-1">
-                  {favorite.movies.title}
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  {new Date(favorite.movies.release_date).getFullYear()}
-                </p>
+        {favorites.length > 0 ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            {favorites.map((favorite) => (
+              <div
+                key={favorite.movieId} // Use movieId as key
+                className="bg-card rounded-lg overflow-hidden shadow-lg transition-transform hover:scale-105"
+              >
+                <img
+                  src={favorite.posterPath ? `https://image.tmdb.org/t/p/w500${favorite.posterPath}` : '/placeholder-image.png'}
+                  alt={favorite.title}
+                  className="w-full aspect-[2/3] object-cover"
+                />
+                <div className="p-4">
+                  <h3 className="font-semibold line-clamp-1">
+                    {favorite.title}
+                  </h3>
+                  {favorite.releaseDate && (
+                    <p className="text-sm text-muted-foreground">
+                      {new Date(favorite.releaseDate).getFullYear()}
+                    </p>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-muted-foreground bg-card p-4 rounded-md">You haven't added any movies to your favorites yet.</p>
+        )}
       </div>
 
       {/* Ratings */}
       <div>
-        <h2 className="text-2xl font-bold mb-4">Your Ratings</h2>
-        <div className="space-y-4">
-          {ratings.map((rating) => (
-            <div key={rating.id} className="bg-card rounded-lg p-6">
-              <div className="flex gap-4">
+        <h2 className="text-2xl font-bold mb-4">Your Ratings & Reviews</h2>
+        {ratings.length > 0 ? (
+          <div className="space-y-4">
+            {ratings.map((rating) => (
+              <div key={rating.movieId} className="bg-card rounded-lg p-6 shadow flex gap-4">
                 <img
-                  src={`https://image.tmdb.org/t/p/w500${rating.movies.poster_path}`}
-                  alt={rating.movies.title}
+                  src={rating.posterPath ? `https://image.tmdb.org/t/p/w500${rating.posterPath}` : '/placeholder-image.png'}
+                  alt={rating.title || 'Movie poster'}
                   className="w-24 h-36 object-cover rounded"
                 />
                 <div className="flex-1">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-lg font-semibold">
-                      {rating.movies.title}
+                      {rating.title || 'Movie Title'}
                     </h3>
                     <div className="flex items-center gap-2">
                       <span className="text-lg font-semibold">
                         {rating.rating}/10
                       </span>
                       <span className="text-sm text-muted-foreground">
-                        ({rating.intimacy_rating})
+                        ({rating.intimacyRating})
                       </span>
                     </div>
                   </div>
-                  {rating.review && <p>{rating.review}</p>}
-                  <p className="text-sm text-muted-foreground mt-2">
-                    Rated on {new Date(rating.created_at).toLocaleDateString()}
-                  </p>
+                  {rating.reviewText && <p className="text-muted-foreground whitespace-pre-wrap">{rating.reviewText}</p>}
+                  {/* Created_at is not stored in localStore.RatingReview */}
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-muted-foreground bg-card p-4 rounded-md">You haven't rated or reviewed any movies yet.</p>
+        )}
       </div>
     </div>
   );

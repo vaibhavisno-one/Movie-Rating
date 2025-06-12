@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuthStore } from '../lib/store';
 import { getMovieDetails } from '../lib/tmdb';
-import { supabase } from '../lib/supabase';
+import * as localStore from '../lib/localStorageService'; // Import Local Storage Service
 import { Star, Heart, Clock, AlertCircle } from 'lucide-react';
 import { Button } from './ui/button';
 import { useDebounce } from '../lib/hooks';
@@ -19,26 +19,16 @@ interface Movie {
   production_companies: { id: number; name: string; origin_country: string }[];
 }
 
-interface Rating {
-  id: string;
-  rating: number;
-  review: string;
-  intimacy_rating: string;
-  created_at: string;
-  profiles: {
-    username: string;
-    avatar_url: string;
-  };
-}
+// Removed Rating interface, as we'll use local state for the current user's review
 
 const MAX_REVIEW_LENGTH = 1000;
 const PROFANITY_LIST = ['badword1', 'badword2']; // Add actual profanity list
 
 export default function MovieDetails() {
-  const { id } = useParams<{ id: string }>();
+  const { id } = useParams<{ id: string }>(); // id is the TMDB movie ID string
   const { user } = useAuthStore();
   const [movie, setMovie] = useState<Movie | null>(null);
-  const [ratings, setRatings] = useState<Rating[]>([]);
+  // Removed ratings state: useState<Rating[]>([]);
   const [userRating, setUserRating] = useState<number>(0);
   const [review, setReview] = useState('');
   const [intimacyRating, setIntimacyRating] = useState<string>('');
@@ -48,53 +38,37 @@ export default function MovieDetails() {
   const [error, setError] = useState<string | null>(null);
   const debouncedReview = useDebounce(review, 500);
 
-  // Validation states
   const [reviewError, setReviewError] = useState<string | null>(null);
-  const [optimisticRating, setOptimisticRating] = useState<Rating | null>(null);
+  // Removed optimisticRating state, direct state updates will reflect changes
 
   useEffect(() => {
     const fetchMovieData = async () => {
+      if (!id) return; // Ensure id is present
+      const movieIdStr = id; // TMDB ID from URL params
+
       try {
         setLoading(true);
-        const movieData = await getMovieDetails(Number(id));
+        const movieData = await getMovieDetails(Number(movieIdStr));
         setMovie(movieData);
 
         if (user) {
-          // Check if movie is in favorites
-          const { data: favoriteData } = await supabase
-            .from('favorites')
-            .select('id')
-            .eq('user_id', user.id)
-            .eq('movie_id', id)
-            .single();
+          // Check if movie is in favorites using Local Storage
+          setIsFavorite(localStore.isFavorite(user.id, movieIdStr));
 
-          setIsFavorite(!!favoriteData);
-
-          // Get user's rating if exists
-          const { data: ratingData } = await supabase
-            .from('ratings')
-            .select('rating, review, intimacy_rating')
-            .eq('user_id', user.id)
-            .eq('movie_id', id)
-            .single();
-
-          if (ratingData) {
-            setUserRating(ratingData.rating);
-            setReview(ratingData.review || '');
-            setIntimacyRating(ratingData.intimacy_rating);
+          // Get user's rating if exists from Local Storage
+          const existingRating = localStore.getRatingReview(user.id, movieIdStr);
+          if (existingRating) {
+            setUserRating(existingRating.rating);
+            setReview(existingRating.reviewText || '');
+            setIntimacyRating(existingRating.intimacyRating || '');
+          } else {
+            // Reset if no rating found for this movie for this user
+            setUserRating(0);
+            setReview('');
+            setIntimacyRating('');
           }
         }
-
-        // Get all ratings
-        const { data: ratingsData } = await supabase
-          .from('ratings')
-          .select('*, profiles:user_id(username, avatar_url)')
-          .eq('movie_id', id)
-          .order('created_at', { ascending: false });
-
-        if (ratingsData) {
-          setRatings(ratingsData);
-        }
+        // Removed fetching all ratings for the movie
       } catch (error) {
         console.error('Error fetching movie data:', error);
         setError('Failed to load movie data');
@@ -104,22 +78,17 @@ export default function MovieDetails() {
     };
 
     fetchMovieData();
-  }, [id, user]);
+  }, [id, user]); // user dependency re-runs if user logs in/out
 
-  // Validate review content
   useEffect(() => {
     if (!debouncedReview) {
       setReviewError(null);
       return;
     }
-
-    // Check length
     if (debouncedReview.length > MAX_REVIEW_LENGTH) {
       setReviewError(`Review must be less than ${MAX_REVIEW_LENGTH} characters`);
       return;
     }
-
-    // Check profanity
     const hasProfanity = PROFANITY_LIST.some(word => 
       debouncedReview.toLowerCase().includes(word)
     );
@@ -127,7 +96,6 @@ export default function MovieDetails() {
       setReviewError('Please keep the review family-friendly');
       return;
     }
-
     setReviewError(null);
   }, [debouncedReview]);
 
@@ -144,99 +112,44 @@ export default function MovieDetails() {
 
     setSubmitting(true);
     setError(null);
+    const movieIdStr = movie.id.toString();
 
     try {
-      // Create optimistic rating
-      const optimisticRating: Rating = {
-        id: 'temp-id',
-        rating: userRating,
-        review: sanitizeReview(review),
-        intimacy_rating: intimacyRating,
-        created_at: new Date().toISOString(),
-        profiles: {
-          username: user.username || 'You',
-          avatar_url: user.avatar_url,
-        },
-      };
-
-      // Update UI optimistically
-      setOptimisticRating(optimisticRating);
-      setRatings(prev => [optimisticRating, ...prev.filter(r => r.id !== 'temp-id')]);
-
-      // First, ensure the movie exists in our database
-      const { data: existingMovie } = await supabase
-        .from('movies')
-        .select('id')
-        .eq('tmdb_id', movie.id)
-        .single();
-
-      let movieId = existingMovie?.id;
-
-      if (!movieId) {
-        const { data: newMovie } = await supabase
-          .from('movies')
-          .insert({
-            tmdb_id: movie.id,
-            title: movie.title,
-            poster_path: movie.poster_path,
-            release_date: movie.release_date,
-          })
-          .select('id')
-          .single();
-
-        movieId = newMovie?.id;
-      }
-
-      if (movieId) {
-        const { error: ratingError } = await supabase.from('ratings').upsert({
-          user_id: user.id,
-          movie_id: movieId,
-          rating: userRating,
-          review: sanitizeReview(review),
-          intimacyRating,
-        });
-
-        if (ratingError) throw ratingError;
-
-        // Refresh ratings
-        const { data: newRatings } = await supabase
-          .from('ratings')
-          .select('*, profiles:user_id(username, avatar_url)')
-          .eq('movie_id', movieId)
-          .order('created_at', { ascending: false });
-
-        if (newRatings) {
-          setRatings(newRatings);
-        }
-      }
+      localStore.saveRatingReview(
+        user.id,
+        movieIdStr,
+        userRating,
+        sanitizeReview(review),
+        intimacyRating,
+        { tmdbId: movie.id, title: movie.title, posterPath: movie.poster_path }
+      );
+      // UI is already updated via state, so no optimistic update needed here for the form itself.
+      // If there was a list of reviews, that would be different.
+      // Display a success message or similar feedback if desired
+      // alert('Rating submitted!'); 
     } catch (error) {
       console.error('Error submitting rating:', error);
       setError('Failed to submit rating. Please try again.');
-      // Revert optimistic update
-      if (optimisticRating) {
-        setRatings(prev => prev.filter(r => r.id !== 'temp-id'));
-      }
     } finally {
       setSubmitting(false);
-      setOptimisticRating(null);
     }
   };
 
   const toggleFavorite = async () => {
     if (!user || !movie) return;
-
+    const movieIdStr = movie.id.toString();
     try {
       if (isFavorite) {
-        await supabase
-          .from('favorites')
-          .delete()
-          .eq('user_id', user.id)
-          .eq('movie_id', id);
+        localStore.removeFavorite(user.id, movieIdStr);
       } else {
-        await supabase.from('favorites').insert({
-          user_id: user.id,
-          movie_id: id,
-        });
+        const favMovieData: localStore.FavoriteMovie = {
+          movieId: movieIdStr,
+          tmdbId: movie.id,
+          title: movie.title,
+          posterPath: movie.poster_path,
+          releaseDate: movie.release_date,
+        };
+        localStore.saveFavorite(user.id, favMovieData);
       }
       setIsFavorite(!isFavorite);
     } catch (error) {
@@ -256,7 +169,7 @@ export default function MovieDetails() {
   if (!movie) {
     return (
       <div className="text-center text-destructive">
-        <p>Movie not found</p>
+        <p>Movie not found or ID missing</p>
       </div>
     );
   }
@@ -275,7 +188,6 @@ export default function MovieDetails() {
   return (
     <div className="max-w-6xl mx-auto">
       <div className="flex flex-col md:flex-row gap-8">
-        {/* Movie Poster and Info */}
         <div className="md:w-1/3">
           <div className="sticky top-8">
             <img
@@ -300,7 +212,6 @@ export default function MovieDetails() {
           </div>
         </div>
 
-        {/* Movie Details and Ratings */}
         <div className="md:w-2/3 space-y-8">
           <div>
             <h1 className="text-4xl font-bold mb-4">{movie.title}</h1>
@@ -328,18 +239,14 @@ export default function MovieDetails() {
             <p className="mt-4 text-lg leading-relaxed">{movie.overview}</p>
           </div>
 
-          {/* Rating Form */}
           {user ? (
             <div className="bg-card rounded-lg p-6 space-y-4">
-              <h3 className="text-xl font-semibold mb-4">Rate this Movie</h3>
-              
+              <h3 className="text-xl font-semibold mb-4">Your Rating & Review</h3>
               {error && (
                 <div className="bg-destructive/10 text-destructive p-3 rounded-md flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4" />
-                  {error}
+                  <AlertCircle className="h-4 w-4" /> {error}
                 </div>
               )}
-
               <div className="flex items-center gap-2">
                 {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((rating) => (
                   <button
@@ -355,7 +262,6 @@ export default function MovieDetails() {
                   </button>
                 ))}
               </div>
-
               <select
                 value={intimacyRating}
                 onChange={(e) => setIntimacyRating(e.target.value)}
@@ -367,7 +273,6 @@ export default function MovieDetails() {
                 <option value="Very Much">Very Much</option>
                 <option value="Most">Most</option>
               </select>
-
               <div>
                 <textarea
                   value={review}
@@ -384,68 +289,61 @@ export default function MovieDetails() {
                   {review.length}/{MAX_REVIEW_LENGTH} characters
                 </p>
               </div>
-
               <Button
                 onClick={handleRatingSubmit}
                 className="w-full"
-                disabled={submitting || !!reviewError}
+                disabled={submitting || !!reviewError || userRating === 0 || !intimacyRating}
               >
                 {submitting ? (
                   <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
                 ) : (
-                  'Submit Rating'
+                  'Submit Your Rating'
                 )}
               </Button>
             </div>
           ) : (
             <div className="bg-card rounded-lg p-6 text-center">
               <p className="text-muted-foreground">
-                Please sign in to rate and review this movie
+                Please sign in to rate and review this movie.
               </p>
             </div>
           )}
 
-          {/* User Ratings */}
+          {/* Display Current User's Review */}
           <div className="space-y-6">
-            <h3 className="text-xl font-semibold">User Reviews</h3>
-            {ratings.length > 0 ? (
-              ratings.map((rating) => (
-                <div
-                  key={rating.id}
-                  className={`bg-card rounded-lg p-6 space-y-3 ${
-                    rating.id === 'temp-id' ? 'opacity-70' : ''
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                        {rating.profiles.username?.[0]?.toUpperCase() || 'U'}
-                      </div>
-                      <div>
-                        <p className="font-medium">
-                          {rating.profiles.username || 'Anonymous'}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          {new Date(rating.created_at).toLocaleDateString()}
-                        </p>
-                      </div>
+            <h3 className="text-xl font-semibold">Your Review</h3>
+            {user && (localStore.getRatingReview(user.id, id || '') || review) ? (
+              <div className="bg-card rounded-lg p-6 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                      {(user.email?.[0] || 'U').toUpperCase()}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg font-semibold">
-                        {rating.rating}/10
-                      </span>
-                      <span className="text-sm text-muted-foreground">
-                        ({rating.intimacy_rating || 'No intimacy rating'})
-                      </span>
+                    <div>
+                      <p className="font-medium">
+                        {user.username || user.email}
+                      </p>
+                      {/* Date is not stored in localStore.RatingReview, so cannot display it unless added */}
                     </div>
                   </div>
-                  {rating.review && (
-                    <p className="text-muted-foreground">{rating.review}</p>
-                  )}
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg font-semibold">
+                      {userRating}/10 
+                    </span>
+                    <span className="text-sm text-muted-foreground">
+                      ({intimacyRating || 'No intimacy rating'})
+                    </span>
+                  </div>
                 </div>
-              ))
+                {review && (
+                  <p className="text-muted-foreground whitespace-pre-wrap">{review}</p>
+                )}
+                {!review && <p className="text-muted-foreground">You have rated this movie but not provided a written review.</p>}
+              </div>
+            ) : user ? (
+              <p className="text-muted-foreground">You have not reviewed this movie yet.</p>
             ) : (
-              <p className="text-muted-foreground">No reviews yet</p>
+              <p className="text-muted-foreground">Sign in to see your review.</p>
             )}
           </div>
         </div>

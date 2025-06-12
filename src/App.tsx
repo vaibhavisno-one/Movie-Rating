@@ -1,6 +1,5 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { useEffect } from 'react';
-import { supabase } from './lib/supabase';
 import { useAuthStore } from './lib/store';
 import Navbar from './components/Navbar';
 import Home from './components/Home';
@@ -10,39 +9,18 @@ import Auth from './components/Auth';
 import { ThemeProvider } from './components/ThemeProvider';
 
 function App() {
-  const setUser = useAuthStore((state) => state.setUser);
+  // const setUser = useAuthStore((state) => state.setUser); // No longer directly setting user like this
+  const checkUserSession = useAuthStore((state) => state.checkUserSession);
+  const loading = useAuthStore((state) => state.loading); // Optional: manage a global loading state
 
   useEffect(() => {
-    // Check active sessions and sets the user
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        setUser({
-          id: session.user.id,
-          email: session.user.email!,
-          username: null,
-          avatar_url: null,
-        });
-      }
-    });
+    checkUserSession();
+  }, [checkUserSession]);
 
-    // Listen for changes in auth state
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        setUser({
-          id: session.user.id,
-          email: session.user.email!,
-          username: null,
-          avatar_url: null,
-        });
-      } else {
-        setUser(null);
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, [setUser]);
+  // Optional: Show a loading indicator while checking session
+  // if (loading) {
+  //   return <div>Loading application...</div>; 
+  // }
 
   return (
     <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
