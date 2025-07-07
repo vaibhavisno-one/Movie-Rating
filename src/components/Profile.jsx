@@ -9,11 +9,11 @@ import { Button } from './ui/button';
 export default function Profile() {
   const { user, setUser } = useAuthStore(); // Assuming setUser can update the user object in store
   const navigate = useNavigate();
-  const [favorites, setFavorites] = useState<localStore.FavoriteMovie[]>([]);
-  const [ratings, setRatings] = useState<localStore.RatingReview[]>([]);
+  const [favorites, setFavorites] = useState([]);
+  const [ratings, setRatings] = useState([]);
   const [username, setUsername] = useState('');
   const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState(null);
 
   useEffect(() => {
     if (!user) {

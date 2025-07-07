@@ -3,7 +3,7 @@
 
 ![alt text](image.png)
 
-This project is a full-stack movie rating and recommendation website. It fetches movie ratings from various sources, computes average ratings, and provides personalized movie recommendations based on the user's mood. The website also features an intuitive UI with animations, a theme switcher, and an intimacy rating feature.
+This project is a  rating and recommendation website. It fetches movie ratings from various sources, computes average ratings, and provides personalized movie recommendations based on the user's mood. The website also features an intuitive UI with animations, a theme switcher, and an intimacy rating feature.
 
 ## Features
 

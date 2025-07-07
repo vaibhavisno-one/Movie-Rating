@@ -8,7 +8,7 @@ export default function Auth() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   // const [resetPassword, setResetPassword] = useState(false); // Removed
   const { signIn, signUp, error: authError, loading: authLoading } = useAuthStore(); // Get error and loading from store
@@ -30,7 +30,7 @@ export default function Auth() {
     return true;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null); // Clear local error
     // setLoading will be handled by the store's authLoading state

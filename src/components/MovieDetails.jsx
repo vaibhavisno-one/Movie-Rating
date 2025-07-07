@@ -8,16 +8,16 @@ import { Button } from './ui/button';
 import { useDebounce } from '../lib/hooks';
 import DOMPurify from 'dompurify';
 
-interface Movie {
-  id: number;
-  title: string;
-  overview: string;
-  poster_path: string;
-  release_date: string;
-  vote_average: number;
-  genres: { id: number; name: string }[];
-  production_companies: { id: number; name: string; origin_country: string }[];
-}
+// interface Movie {
+//   id: number;
+//   title: string;
+//   overview: string;
+//   poster_path: string;
+//   release_date: string;
+//   vote_average: number;
+//   genres: { id: number; name: string }[];
+//   production_companies: { id: number; name: string; origin_country: string }[];
+// }
 
 // Removed Rating interface, as we'll use local state for the current user's review
 
@@ -25,20 +25,20 @@ const MAX_REVIEW_LENGTH = 1000;
 const PROFANITY_LIST = ['badword1', 'badword2']; // Add actual profanity list
 
 export default function MovieDetails() {
-  const { id } = useParams<{ id: string }>(); // id is the TMDB movie ID string
+  const { id } = useParams(); // id is the TMDB movie ID string
   const { user } = useAuthStore();
-  const [movie, setMovie] = useState<Movie | null>(null);
+  const [movie, setMovie] = useState(null);
   // Removed ratings state: useState<Rating[]>([]);
-  const [userRating, setUserRating] = useState<number>(0);
+  const [userRating, setUserRating] = useState(0);
   const [review, setReview] = useState('');
-  const [intimacyRating, setIntimacyRating] = useState<string>('');
+  const [intimacyRating, setIntimacyRating] = useState('');
   const [isFavorite, setIsFavorite] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(null);
   const debouncedReview = useDebounce(review, 500);
 
-  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [reviewError, setReviewError] = useState(null);
   // Removed optimisticRating state, direct state updates will reflect changes
 
   useEffect(() => {
@@ -99,7 +99,7 @@ export default function MovieDetails() {
     setReviewError(null);
   }, [debouncedReview]);
 
-  const sanitizeReview = (content: string) => {
+  const sanitizeReview = (content) => {
     return DOMPurify.sanitize(content, { ALLOWED_TAGS: [] });
   };
 
@@ -142,7 +142,7 @@ export default function MovieDetails() {
       if (isFavorite) {
         localStore.removeFavorite(user.id, movieIdStr);
       } else {
-        const favMovieData: localStore.FavoriteMovie = {
+        const favMovieData = {
           movieId: movieIdStr,
           tmdbId: movie.id,
           title: movie.title,
