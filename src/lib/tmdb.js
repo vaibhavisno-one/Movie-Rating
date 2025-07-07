@@ -5,7 +5,7 @@ if (!TMDB_API_KEY) {
   throw new Error('Missing TMDB API key');
 }
 
-export async function searchMovies(query: string, language?: string) {
+export async function searchMovies(query, language) {
   const params = new URLSearchParams({
     api_key: TMDB_API_KEY,
     query: query,
@@ -15,14 +15,14 @@ export async function searchMovies(query: string, language?: string) {
   return response.json();
 }
 
-export async function getMovieDetails(id: number) {
+export async function getMovieDetails(id) {
   const response = await fetch(
     `${TMDB_BASE_URL}/movie/${id}?api_key=${TMDB_API_KEY}&append_to_response=keywords,watch/providers`
   );
   return response.json();
 }
 
-export async function getPopularMovies(page = 1, language?: string) {
+export async function getPopularMovies(page = 1, language) {
   const params = new URLSearchParams({
     api_key: TMDB_API_KEY,
     page: page.toString(),
@@ -32,7 +32,7 @@ export async function getPopularMovies(page = 1, language?: string) {
   return response.json();
 }
 
-export async function getMoviesByGenre(genreId: number, page = 1, language?: string) {
+export async function getMoviesByGenre(genreId, page = 1, language) {
   const params = new URLSearchParams({
     api_key: TMDB_API_KEY,
     with_genres: genreId.toString(),
@@ -55,7 +55,7 @@ const moodMap = {
   thoughtful: { keywords: [9714], genres: [18, 99] }, // drama, documentary
 };
 
-export async function getMoviesByMood(mood: keyof typeof moodMap, page = 1) {
+export async function getMoviesByMood(mood, page = 1) {
   const { keywords, genres } = moodMap[mood];
   const params = new URLSearchParams({
     api_key: TMDB_API_KEY,

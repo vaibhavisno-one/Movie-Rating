@@ -1,24 +1,24 @@
 import { create } from 'zustand';
 
-interface User {
-  id: string;
-  email: string;
-  username?: string;
-}
+// interface User {
+//   id: string;
+//   email: string;
+//   username?: string;
+// }
 
-interface AuthState {
-  user: User | null;
-  loading: boolean;
-  error: string | null;
-  setUser: (user: User | null) => void;
-  signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string) => Promise<void>;
-  signOut: () => Promise<void>;
-  checkUserSession: () => void;
-  updateUsername: (newUsername: string) => void;
-}
+// interface AuthState {
+//   user: User | null;
+//   loading: boolean;
+//   error: string | null;
+//   setUser: (user: User | null) => void;
+//   signIn: (email: string, password: string) => Promise<void>;
+//   signUp: (email: string, password: string) => Promise<void>;
+//   signOut: () => Promise<void>;
+//   checkUserSession: () => void;
+//   updateUsername: (newUsername: string) => void;
+// }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create((set) => ({
   user: null,
   loading: true, // Set to true, checkUserSession will set to false
   error: null,
@@ -36,7 +36,7 @@ export const useAuthStore = create<AuthState>((set) => ({
           username = existingUser.username;
         }
       }
-      const userData: User = { id: email, email, username: username || undefined };
+      const userData = { id: email, email, username: username || undefined };
       localStorage.setItem('user', JSON.stringify(userData));
       set({ user: userData, loading: false, error: null });
     } catch (error) {
@@ -84,7 +84,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({ user: null, loading: false, error: `Failed to load session: ${errorMessage}` });
     }
   },
-  updateUsername: (newUsername: string) => {
+  updateUsername: (newUsername) => {
     set((state) => {
       if (state.user) {
         const updatedUser = { ...state.user, username: newUsername };

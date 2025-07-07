@@ -5,13 +5,13 @@ import { Search, Filter, Globe2 } from 'lucide-react';
 import { Button } from './ui/button';
 import { useDebounce } from '../lib/hooks';
 
-interface Movie {
-  id: number;
-  title: string;
-  poster_path: string;
-  release_date: string;
-  vote_average: number;
-}
+// interface Movie {
+//   id: number;
+//   title: string;
+//   poster_path: string;
+//   release_date: string;
+//   vote_average: number;
+// }
 
 const genres = [
   { id: 28, name: 'Action' },
@@ -34,21 +34,21 @@ const moods = [
 ];
 
 export default function Home() {
-  const [movies, setMovies] = useState<Movie[]>([]);
+  const [movies, setMovies] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedGenre, setSelectedGenre] = useState<number | null>(null);
-  const [selectedMood, setSelectedMood] = useState<string | null>(null);
-  const [selectedLanguage, setSelectedLanguage] = useState<string | null>(null);
+  const [selectedGenre, setSelectedGenre] = useState(null);
+  const [selectedMood, setSelectedMood] = useState(null);
+  const [selectedLanguage, setSelectedLanguage] = useState(null);
   const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
-  const observer = useRef<IntersectionObserver | null>(null);
+  const observer = useRef(null);
   const debouncedSearch = useDebounce(searchQuery, 300);
 
   const lastMovieElementRef = useCallback(
-    (node: HTMLDivElement | null) => {
+    (node) => {
       if (loading) return;
       if (observer.current) observer.current.disconnect();
       observer.current = new IntersectionObserver((entries) => {
@@ -71,7 +71,7 @@ export default function Home() {
           data = await searchMovies(debouncedSearch, selectedLanguage || undefined);
           setHasMore(false); // Disable infinite scroll for search results
         } else if (selectedMood) {
-          data = await getMoviesByMood(selectedMood as keyof typeof moods, page);
+          data = await getMoviesByMood(selectedMood, page);
         } else if (selectedGenre) {
           data = await getMoviesByGenre(selectedGenre, page, selectedLanguage || undefined);
         } else {
@@ -99,7 +99,7 @@ export default function Home() {
     fetchMovies();
   }, [debouncedSearch, selectedGenre, selectedMood, selectedLanguage, page]);
 
-  const handleFilterChange = (type: 'genre' | 'mood' | 'language', value: any) => {
+  const handleFilterChange = (type, value) => {
     setPage(1); // Reset page when changing filters
     setMovies([]); // Clear current movies
     
